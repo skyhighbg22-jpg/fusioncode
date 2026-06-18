@@ -111,4 +111,62 @@ describe('TUI reducer', () => {
     expect(s.turns).toHaveLength(4) // user, assistant, user, assistant
     expect(s.turns.map((t) => t.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
   })
+
+  it('set_theme updates the theme', () => {
+    let s = init()
+    s = reducer(s, { type: 'set_theme', theme: 'ocean' })
+    expect(s.theme).toBe('ocean')
+  })
+
+  it('cycle_theme advances through the theme list and wraps', () => {
+    let s = init() // default
+    expect(s.theme).toBe('default')
+    s = reducer(s, { type: 'cycle_theme' })
+    expect(s.theme).toBe('ocean')
+    s = reducer(s, { type: 'cycle_theme' })
+    s = reducer(s, { type: 'cycle_theme' })
+    s = reducer(s, { type: 'cycle_theme' })
+    expect(s.theme).toBe('default') // wrapped after forest
+  })
+
+  it('set_mode increments modeFlash (triggers pill flash)', () => {
+    const s = init()
+    const before = s.modeFlash
+    const after = reducer(s, { type: 'set_mode', mode: 'plan' })
+    expect(after.mode).toBe('plan')
+    expect(after.modeFlash).toBe(before + 1)
+  })
+
+  it('flash_mode increments the counter without changing mode', () => {
+    const s = init()
+    expect(reducer(s, { type: 'flash_mode' }).modeFlash).toBe(s.modeFlash + 1)
+  })
+
+  it('set_info stores and clears a transient message', () => {
+    let s = init()
+    s = reducer(s, { type: 'set_info', info: 'hello' })
+    expect(s.info).toBe('hello')
+    s = reducer(s, { type: 'set_info', info: null })
+    expect(s.info).toBeNull()
+  })
+
+  it('submit clears any pending info message', () => {
+    let s = reducer(init(), { type: 'set_info', info: 'note' })
+    s = reducer(s, { type: 'submit', prompt: 'go' })
+    expect(s.info).toBeNull()
+  })
+
+  it('set_connected updates the connected flag', () => {
+    const s = init()
+    expect(s.connected).toBe(false)
+    expect(reducer(s, { type: 'set_connected', connected: true }).connected).toBe(true)
+  })
+
+  it('createInitialState accepts a connected flag', () => {
+    const s = createInitialState({ mode: 'build', provider: 'openai', model: 'gpt-4o', connected: true })
+    expect(s.connected).toBe(true)
+    expect(s.theme).toBe('default')
+    expect(s.modeFlash).toBe(0)
+    expect(s.info).toBeNull()
+  })
 })

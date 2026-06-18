@@ -4,7 +4,22 @@
 
 import type { AgentMode } from '../types/index.js'
 
-export const SLASH_COMMANDS = ['help', 'mode', 'model', 'provider', 'clear', 'status', 'exit'] as const
+export const SLASH_COMMANDS = [
+  'help',
+  'mode',
+  'model',
+  'provider',
+  'clear',
+  'status',
+  'exit',
+  'connect',
+  'disconnect',
+  'models',
+  'providers',
+  'retry',
+  'theme',
+  'version',
+] as const
 export type SlashCommandName = (typeof SLASH_COMMANDS)[number]
 
 const VALID_MODES: AgentMode[] = ['build', 'plan', 'debug', 'review', 'check']
@@ -50,11 +65,18 @@ export interface CommandResult {
     | 'toggle-help'
     | 'show-status'
     | 'exit'
+    | 'connect'
+    | 'disconnect'
+    | 'show-message'
+    | 'retry'
+    | 'cycle-theme'
     | 'noop'
     | 'error'
-  /** Value for set-mode/set-provider/set-model; prompt for run-agent. */
+  /** Value for set-mode/set-provider/set-model; provider for connect; prompt for run-agent. */
   value?: string
-  /** Human-readable message for noop/error/show-status. */
+  /** Second value (e.g. API key for connect). */
+  value2?: string
+  /** Human-readable message for noop/error/show-message. */
   message?: string
 }
 
@@ -95,6 +117,32 @@ export function evalCommand(parsed: { command: SlashCommandName | 'unknown'; arg
     case 'exit':
       return { kind: 'exit' }
 
+    case 'connect': {
+      // /connect <provider> [key]
+      const parts = parsed.args.split(/\s+/)
+      if (!parts[0]) return { kind: 'error', message: 'Usage: /connect <provider> [key]' }
+      return { kind: 'connect', value: parts[0], value2: parts.slice(1).join(' ') || undefined }
+    }
+
+    case 'disconnect':
+      return { kind: 'disconnect' }
+
+    case 'models':
+      // The message is built by the App (it has access to config); signal here.
+      return { kind: 'show-message', message: '__models__' }
+
+    case 'providers':
+      return { kind: 'show-message', message: '__providers__' }
+
+    case 'retry':
+      return { kind: 'retry' }
+
+    case 'theme':
+      return { kind: 'cycle-theme' }
+
+    case 'version':
+      return { kind: 'show-message', message: '__version__' }
+
     case 'unknown':
       return {
         kind: 'error',
@@ -106,6 +154,11 @@ export function evalCommand(parsed: { command: SlashCommandName | 'unknown'; arg
   }
 }
 
+/** Sentinel messages the App resolves into rich content (models/providers/version). */
+export const MODELS_SENTINEL = '__models__'
+export const PROVIDERS_SENTINEL = '__providers__'
+export const VERSION_SENTINEL = '__version__'
+
 /** The full /help reference text shown in the help overlay. */
 export const HELP_TEXT = [
   'FusionCode — Commands',
@@ -114,10 +167,17 @@ export const HELP_TEXT = [
   '  /mode <name>           Switch mode: build | plan | debug | review | check',
   '  /model <name>          Override the model for the next run',
   '  /provider <name>       Switch provider',
+  '  /connect <p> [key]     Connect a provider (set its API key)',
+  '  /disconnect            Clear the current provider key',
+  '  /models                List models for the current provider',
+  '  /providers             List all providers + connection status',
+  '  /retry                 Re-run the last prompt',
+  '  /theme                 Cycle color theme',
+  '  /version               Show version info',
   '  /clear                 Clear the conversation',
   '  /status                Show current config + git state',
   '  /exit                  Quit FusionCode',
   '',
   '  Type any other text to send it to the agent.',
-  '  Press Esc to cancel an in-progress run.',
+  '  Press Tab to cycle modes · Esc to cancel a run.',
 ].join('\n')

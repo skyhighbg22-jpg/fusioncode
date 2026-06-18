@@ -8,6 +8,9 @@ import type { AgentMode } from '../types/index.js'
 
 export type TuiStatus = 'idle' | 'running' | 'cancelled' | 'error'
 
+export const THEMES = ['default', 'ocean', 'sunset', 'forest'] as const
+export type Theme = (typeof THEMES)[number]
+
 export interface ToolEvent {
   kind: 'call' | 'result'
   /** Tool name on a call; the tool name this result belongs to on a result. */
@@ -47,6 +50,14 @@ export interface TuiState {
   streamingText: string
   /** In-flight tool events for the active assistant turn. */
   currentTools: ToolEvent[]
+  /** Active color theme (cycled by /theme). */
+  theme: Theme
+  /** Incremented on each mode change (Tab or /mode) to trigger the pill flash. */
+  modeFlash: number
+  /** Transient informational message shown above the prompt (cleared on submit). */
+  info: string | null
+  /** Whether the current provider is connected (has a key or is local). */
+  connected: boolean
 }
 
 export type TuiAction =
@@ -63,8 +74,18 @@ export type TuiAction =
   | { type: 'clear' }
   | { type: 'toggle_help' }
   | { type: 'git'; git: GitState }
+  | { type: 'set_theme'; theme: Theme }
+  | { type: 'cycle_theme' }
+  | { type: 'flash_mode' }
+  | { type: 'set_info'; info: string | null }
+  | { type: 'set_connected'; connected: boolean }
 
-export function createInitialState(opts: { mode: AgentMode; provider: string; model: string }): TuiState {
+export function createInitialState(opts: {
+  mode: AgentMode
+  provider: string
+  model: string
+  connected?: boolean
+}): TuiState {
   return {
     turns: [],
     status: 'idle',
@@ -77,6 +98,10 @@ export function createInitialState(opts: { mode: AgentMode; provider: string; mo
     showBanner: true,
     streamingText: '',
     currentTools: [],
+    theme: 'default',
+    modeFlash: 0,
+    info: null,
+    connected: opts.connected ?? false,
   }
 }
 
@@ -128,6 +153,7 @@ export function reducer(state: TuiState, action: TuiAction): TuiState {
         status: 'running',
         error: null,
         showBanner: false,
+        info: null,
         streamingText: '',
         currentTools: [],
       }
@@ -183,7 +209,7 @@ export function reducer(state: TuiState, action: TuiAction): TuiState {
     }
 
     case 'set_mode':
-      return { ...state, mode: action.mode }
+      return { ...state, mode: action.mode, modeFlash: state.modeFlash + 1 }
 
     case 'set_provider':
       return { ...state, provider: action.provider }
@@ -192,13 +218,31 @@ export function reducer(state: TuiState, action: TuiAction): TuiState {
       return { ...state, model: action.model }
 
     case 'clear':
-      return { ...state, turns: [], error: null, status: 'idle', showBanner: false }
+      return { ...state, turns: [], error: null, status: 'idle', showBanner: false, info: null }
 
     case 'toggle_help':
       return { ...state, showHelp: !state.showHelp }
 
     case 'git':
       return { ...state, git: action.git }
+
+    case 'set_theme':
+      return { ...state, theme: action.theme }
+
+    case 'cycle_theme': {
+      const idx = THEMES.indexOf(state.theme)
+      const next = THEMES[(idx + 1) % THEMES.length]
+      return { ...state, theme: next }
+    }
+
+    case 'flash_mode':
+      return { ...state, modeFlash: state.modeFlash + 1 }
+
+    case 'set_info':
+      return { ...state, info: action.info }
+
+    case 'set_connected':
+      return { ...state, connected: action.connected }
 
     default:
       return state

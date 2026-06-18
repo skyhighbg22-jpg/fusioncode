@@ -70,9 +70,69 @@ describe('evalCommand', () => {
     expect(r.message).toContain('/help')
   })
 
-  it('HELP_TEXT lists all commands', () => {
+  // ---- 7 new commands ----
+
+  it('connect with provider + key returns connect with both values', () => {
+    const r = evalCommand({ command: 'connect', args: 'openai sk-abc' })
+    expect(r.kind).toBe('connect')
+    expect(r.value).toBe('openai')
+    expect(r.value2).toBe('sk-abc')
+  })
+
+  it('connect with provider only returns connect with undefined key', () => {
+    const r = evalCommand({ command: 'connect', args: 'ollama' })
+    expect(r.kind).toBe('connect')
+    expect(r.value).toBe('ollama')
+    expect(r.value2).toBeUndefined()
+  })
+
+  it('connect with no args is an error', () => {
+    const r = evalCommand({ command: 'connect', args: '' })
+    expect(r.kind).toBe('error')
+    expect(r.message).toContain('Usage')
+  })
+
+  it('disconnect returns the disconnect kind', () => {
+    expect(evalCommand({ command: 'disconnect', args: '' }).kind).toBe('disconnect')
+  })
+
+  it('models returns a show-message sentinel', () => {
+    const r = evalCommand({ command: 'models', args: '' })
+    expect(r.kind).toBe('show-message')
+    expect(r.message).toBe('__models__')
+  })
+
+  it('providers returns a show-message sentinel', () => {
+    const r = evalCommand({ command: 'providers', args: '' })
+    expect(r.kind).toBe('show-message')
+    expect(r.message).toBe('__providers__')
+  })
+
+  it('retry returns the retry kind', () => {
+    expect(evalCommand({ command: 'retry', args: '' }).kind).toBe('retry')
+  })
+
+  it('theme returns cycle-theme', () => {
+    expect(evalCommand({ command: 'theme', args: '' }).kind).toBe('cycle-theme')
+  })
+
+  it('version returns a show-message sentinel', () => {
+    const r = evalCommand({ command: 'version', args: '' })
+    expect(r.kind).toBe('show-message')
+    expect(r.message).toBe('__version__')
+  })
+
+  it('HELP_TEXT lists all 14 commands', () => {
     expect(HELP_TEXT).toContain('/help')
     expect(HELP_TEXT).toContain('/mode')
+    expect(HELP_TEXT).toContain('/connect')
+    expect(HELP_TEXT).toContain('/disconnect')
+    expect(HELP_TEXT).toContain('/models')
+    expect(HELP_TEXT).toContain('/providers')
+    expect(HELP_TEXT).toContain('/retry')
+    expect(HELP_TEXT).toContain('/theme')
+    expect(HELP_TEXT).toContain('/version')
     expect(HELP_TEXT).toContain('/exit')
+    expect(HELP_TEXT).toContain('Tab to cycle modes')
   })
 })
