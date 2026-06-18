@@ -164,4 +164,50 @@ describe('AgentRunner', () => {
     expect(agent).toBeInstanceOf(AgentRunner)
     expect(agent.modeName).toBe('build')
   })
+
+  it('aborts gracefully on signal: emits a cancelled event and returns partial text (no throw)', async () => {
+    // A provider that streams one token, then blocks until aborted.
+    class SlowMockProvider extends MockProvider {
+      constructor(config: ProviderConfig) {
+        super(config, [[{ type: 'text', content: 'partial' }]])
+      }
+      async *stream(
+        messages: Message[],
+        tools?: FunctionToolSchema[],
+        signal?: AbortSignal,
+      ): AsyncGenerator<StreamEvent> {
+        yield { type: 'text', content: 'partial' }
+        // Block until aborted; resolve the promise when the signal fires.
+        await new Promise<void>((resolve) => {
+          if (signal?.aborted) return resolve()
+          signal?.addEventListener('abort', () => resolve(), { once: true })
+        })
+        const err = new Error('The operation was aborted')
+        err.name = 'AbortError'
+        throw err
+      }
+    }
+    registerProvider('mock-slow', (c) => new SlowMockProvider(c))
+
+    let sawCancelled = false
+    const runtime = mockRuntime(tmp, {
+      'mock-slow': { name: 'mock-slow', baseUrl: 'http://x', apiKey: 'k', model: 'm' },
+    })
+    const runner = new AgentRunner({ mode: 'build', provider: 'mock-slow', runtime })
+
+    const controller = new AbortController()
+    const runPromise = runner.run('hello', {
+      signal: controller.signal,
+      onEvent: (e) => {
+        if (e.type === 'error' && e.error === 'cancelled') sawCancelled = true
+      },
+    })
+
+    // Abort shortly after the run starts.
+    setTimeout(() => controller.abort(), 50)
+    const result = await runPromise
+
+    expect(sawCancelled).toBe(true)
+    expect(result).toBe('partial') // partial output preserved, not thrown
+  })
 })

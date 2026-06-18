@@ -13,6 +13,7 @@ import { createAgent } from '../agents/index.js'
 import { loadConfig, saveConfig } from '../config/index.js'
 import { getGitManager } from '../git/index.js'
 import { toErrorMessage } from '../utils/errors.js'
+import { launchTui } from '../tui/index.js'
 
 const program = new Command()
 
@@ -161,4 +162,12 @@ program
     }
   })
 
-program.parse(process.argv)
+// Bare `fusion` (no subcommand) launches the interactive TUI.
+program.action(() => {
+  launchTui().catch((e) => {
+    console.error(chalk.red('Error:'), toErrorMessage(e))
+    process.exit(1)
+  })
+})
+
+program.parseAsync(process.argv)

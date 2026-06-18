@@ -12,7 +12,7 @@ import { RuntimeContext } from '../runtime/context.js'
 import { getMode } from './modes/index.js'
 import type { ModeStrategy } from './modes/index.js'
 import { logger } from '../logger/index.js'
-import { toErrorMessage } from '../utils/errors.js'
+import { toErrorMessage, isAbortError } from '../utils/errors.js'
 
 export interface RunOptions {
   mode?: AgentMode
@@ -132,6 +132,7 @@ export class AgentRunner {
     let iterations = 0
     let finalResponse = ''
     let exhausted = false
+    let cancelled = false
 
     while (iterations < maxIterations) {
       iterations++
@@ -140,18 +141,29 @@ export class AgentRunner {
       let assistantText = ''
       const pendingToolCalls: ToolCall[] = []
 
-      for await (const event of provider.stream(allMessages, toolSchemas, options.signal)) {
-        onEvent?.({ ...event, sessionId: this.session.id })
+      try {
+        for await (const event of provider.stream(allMessages, toolSchemas, options.signal)) {
+          onEvent?.({ ...event, sessionId: this.session.id })
 
-        if (event.type === 'text' && event.content) {
-          assistantText += event.content
-        } else if (event.type === 'tool_call' && event.toolCall) {
-          pendingToolCalls.push(event.toolCall)
-        } else if (event.type === 'done') {
-          break
-        } else if (event.type === 'error') {
-          throw new Error(event.error ?? 'Stream error')
+          if (event.type === 'text' && event.content) {
+            assistantText += event.content
+          } else if (event.type === 'tool_call' && event.toolCall) {
+            pendingToolCalls.push(event.toolCall)
+          } else if (event.type === 'done') {
+            break
+          } else if (event.type === 'error') {
+            throw new Error(event.error ?? 'Stream error')
+          }
         }
+      } catch (e) {
+        if (isAbortError(e)) {
+          // Esc-to-cancel: stop the loop, keep partial output, signal the TUI.
+          cancelled = true
+          finalResponse = assistantText
+          onEvent?.({ type: 'error', error: 'cancelled', sessionId: this.session.id })
+          break
+        }
+        throw e
       }
 
       const assistantMsg: Message = {
@@ -203,7 +215,7 @@ export class AgentRunner {
       logger.warn(warn)
     }
 
-    await this.mode.onRunComplete?.(runCtx, finalResponse)
+    if (!cancelled) await this.mode.onRunComplete?.(runCtx, finalResponse)
     return finalResponse
   }
 
